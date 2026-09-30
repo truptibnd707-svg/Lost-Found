@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Campus Lost & Found Portal</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+
+<style>
+/* === ORIGINAL STYLES (UNCHANGED) === */
+body {
+  background: linear-gradient(120deg, #e2c0fd 0%, #fef6e4 100%);
+  font-family: 'Poppins', sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+.container {
+  max-width: 480px;
+  margin: 40px auto;
+  background: #fff;
+  border-radius: 24px;
+  box-shadow: 0 12px 40px rgba(156, 39, 176, 0.12);
+  padding: 2.5rem 2rem;
+}
+h1 {
+  text-align: center;
+  color: #892cdc;
+}
+.card {
+  background: #f7eaff;
+  border-radius: 18px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.card-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #562099;
+  margin-bottom: 1rem;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 0.75em;
+  border-radius: 10px;
+  border: none;
+  margin-bottom: 0.7rem;
+}
+button {
+  background: linear-gradient(90deg,#892cdc,#c147e9);
+  color: white;
+  border: none;
+  padding: 0.9rem;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.image-preview {
+  width: 120px;
+  display: none;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.found-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.found-card {
+  background:#e6d8fc;
+  padding:12px;
+  border-radius:12px;
+  cursor:pointer;
+}
+.found-card img {
+  width:100%;
+  border-radius:8px;
+}
+.badge {
+  font-size:.75rem;
+  font-weight:600;
+  padding:2px 8px;
+  border-radius:6px;
+  color:#fff;
+}
+.Lost { background:#e95488; }
+.Found { background:#34c759; }
+.success {
+  background:#e0f9da;
+  color:#18823a;
+  padding:8px;
+  border-radius:8px;
+}
+.filters {
+  display:flex;
+  justify-content:center;
+  gap:8px;
+  margin-bottom:12px;
+}
+.filters button {
+  padding:6px 14px;
+  border-radius:8px;
+  font-size:.9rem;
+}
+.modal {
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.5);
+}
+.modal-content {
+  background:#fff;
+  margin:10% auto;
+  padding:20px;
+  max-width:400px;
+  border-radius:12px;
+}
+.close {
+  float:right;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h1>Campus Lost & Found Portal</h1>
+
+<!-- REPORT -->
+<div class="card">
+<div class="card-title">Report Lost / Found Item</div>
+
+<form id="reportForm" enctype="multipart/form-data">
+  <select id="type" name="type">
+    <option value="Lost">Lost</option>
+    <option value="Found">Found</option>
+  </select>
+
+  <label>Owner Photo</label>
+  <input type="file" id="ownerPhoto" name="ownerPhoto">
+  <img id="ownerPreview" class="image-preview">
+
+  <label>Item Photo</label>
+  <input type="file" id="itemPhoto" name="itemPhoto">
+  <img id="itemPreview" class="image-preview">
+
+  <input type="text" id="item" name="item" placeholder="Item name" required>
+  <input type="text" id="location" name="location" placeholder="Location" required>
+  <input type="text" id="contact" name="contact" placeholder="Contact" required>
+  <input type="email" id="email" name="email" placeholder="Email" required>
+  <textarea id="desc" name="desc" placeholder="Description"></textarea>
+
+  <button type="submit">Report</button>
+</form>
+
+<div id="reportSuccess"></div>
+</div>
+
+<!-- SEARCH -->
+<div class="card">
+<div class="card-title">View Items</div>
+
+<input id="searchInput" placeholder="Search items">
+
+<div class="filters">
+  <button data-filter="All">All</button>
+  <button data-filter="Lost">Lost</button>
+  <button data-filter="Found">Found</button>
+</div>
+
+<div id="searchResults" class="found-grid"></div>
+</div>
+</div>
+
+<!-- MODAL -->
+<div id="itemModal" class="modal">
+<div class="modal-content">
+<span class="close">&times;</span>
+<div id="modalBody"></div>
+</div>
+</div>
+
+<script>
+const API = "http://127.0.0.1:5000";
+let currentFilter = "All";
+
+/* IMAGE PREVIEW */
+function preview(input, img){
+  input.onchange = () => {
+    const f = input.files[0];
+    if(f){
+      const r = new FileReader();
+      r.onload = e => {
+        img.src = e.target.result;
+        img.style.display="block";
+      };
+      r.readAsDataURL(f);
+    }
+  }
+}
+preview(ownerPhoto, ownerPreview);
+preview(itemPhoto, itemPreview);
+
+/* SUBMIT */
+reportForm.onsubmit = e => {
+  e.preventDefault();
+  const fd = new FormData(reportForm);
+
+  fetch(API+"/report",{method:"POST",body:fd})
+    .then(r=>r.json())
+    .then(()=>{
+      reportSuccess.innerHTML =
+        "<div class='success'>✔ Report submitted successfully</div>";
+      reportForm.reset();
+      ownerPreview.style.display="none";
+      itemPreview.style.display="none";
+      loadItems();
+    });
+};
+
+/* LOAD ITEMS */
+function loadItems(){
+  fetch(`${API}/items?search=${searchInput.value}&type=${currentFilter}`)
+    .then(r=>r.json())
+    .then(renderItems);
+}
+
+/* RENDER */
+function renderItems(items){
+  searchResults.innerHTML="";
+  if(!items.length){
+    searchResults.innerHTML="<p>No items found</p>";
+    return;
+  }
+  items.forEach(i=>{
+    const c=document.createElement("div");
+    c.className="found-card";
+    c.innerHTML=`
+      <span class="badge ${i.type}">${i.type}</span>
+      <b>${i.name}</b>
+      <img src="${API}/${i.item_photo}">
+    `;
+    c.onclick=()=>openModal(i);
+    searchResults.appendChild(c);
+  });
+}
+
+/* MODAL */
+function openModal(i){
+  modalBody.innerHTML=`
+    <span class="badge ${i.type}">${i.type}</span>
+    <h3>${i.name}</h3>
+    <p>${i.description}</p>
+    <p><b>Location:</b> ${i.location}</p>
+    <p><b>Email:</b> ${i.email}</p>
+    <p><b>Contact:</b> ${i.contact}</p>
+    <img src="${API}/${i.item_photo}" width="100">
+    <img src="${API}/${i.owner_photo}" width="100">
+  `;
+  itemModal.style.display="block";
+}
+
+/* EVENTS */
+searchInput.oninput = loadItems;
+document.querySelectorAll(".filters button").forEach(b=>{
+  b.onclick=()=>{ currentFilter=b.dataset.filter; loadItems(); };
+});
+document.querySelector(".close").onclick=()=>itemModal.style.display="none";
+window.onclick=e=>{ if(e.target==itemModal) itemModal.style.display="none"; };
+
+loadItems();
+</script>
+
+</body>
+</html>

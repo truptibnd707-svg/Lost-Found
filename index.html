@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Interactive Recommendation System</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: Arial; }
+        .node { stroke: #fff; stroke-width: 1.5px; }
+        .user { fill: #1f77b4; }
+        .item { fill: #ff7f0e; }
+        .highlight { stroke: green; stroke-width: 3px; }
+    </style>
+</head>
+<body>
+<h2>Interactive User-Item Recommendation</h2>
+<svg width="600" height="400"></svg>
+
+<script>
+const nodes = [
+    {id: 0, type: 'user'}, {id:1, type:'user'}, {id:2, type:'user'},
+    {id:3, type:'item'}, {id:4, type:'item'}, {id:5, type:'item'}
+];
+
+const links = [
+    {source:0, target:3}, {source:0, target:4}, {source:1, target:4},
+    {source:2, target:4}, {source:2, target:5}
+];
+
+const svg = d3.select("svg");
+const width = +svg.attr("width");
+const height = +svg.attr("height");
+
+const simulation = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+    .force("charge", d3.forceManyBody().strength(-300))
+    .force("center", d3.forceCenter(width/2, height/2));
+
+const link = svg.append("g")
+    .attr("stroke", "#999")
+    .attr("stroke-opacity", 0.6)
+  .selectAll("line")
+  .data(links)
+  .join("line")
+    .attr("stroke-width", 2);
+
+const node = svg.append("g")
+  .selectAll("circle")
+  .data(nodes)
+  .join("circle")
+    .attr("r", 20)
+    .attr("class", d => d.type)
+    .call(drag(simulation))
+    .on("click", async d => {
+        if(d.type==='user'){
+            const res = await fetch(`http://127.0.0.1:8000/predict/${d.id}`);
+            const data = await res.json();
+            highlightItems(data.recommended_items);
+        }
+    });
+
+node.append("title").text(d => d.id);
+
+simulation.on("tick", () => {
+  link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+  node
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+});
+
+function drag(simulation){
+  function dragstarted(event, d){
+    if(!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x; d.fy = d.y;
+  }
+  function dragged(event,d){ d.fx = event.x; d.fy = event.y; }
+  function dragended(event,d){
+    if(!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  }
+  return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+}
+
+function highlightItems(ids){
+    node.classed("highlight", d => ids.includes(d.id));
+}
+</script>
+</body>
+</html>
